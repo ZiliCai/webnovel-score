@@ -1,0 +1,8 @@
+[
+  {"chapter":1,"title":"c1","word_count":3000,"end_hook":{"strength":3,"type":"悬念未解","quote":"q"},"shuang_points":[{"type":"打脸","intensity":3,"quote":"q"}],"emotion_tone":"爽","conflict_closed":true,"info_gain":true,"is_filler":false,"commercial_flags":[]},
+  {"chapter":2,"title":"c2","word_count":3000,"end_hook":{"strength":2,"type":"危机降临","quote":"q"},"shuang_points":[{"type":"升级","intensity":2,"quote":"q"}],"emotion_tone":"热血","conflict_closed":true,"info_gain":true,"is_filler":false,"commercial_flags":[]},
+  {"chapter":3,"title":"c3","word_count":3000,"end_hook":{"strength":0,"type":"无","quote":""},"shuang_points":[],"emotion_tone":"平淡","conflict_closed":false,"info_gain":false,"is_filler":true,"commercial_flags":[]},
+  {"chapter":4,"title":"c4","word_count":3000,"end_hook":{"strength":0,"type":"无","quote":""},"shuang_points":[],"emotion_tone":"平淡","conflict_closed":false,"info_gain":false,"is_filler":true,"commercial_flags":[]},
+  {"chapter":5,"title":"c5","word_count":3000,"end_hook":{"strength":0,"type":"无","quote":""},"shuang_points":[],"emotion_tone":"平淡","conflict_closed":false,"info_gain":false,"is_filler":true,"commercial_flags":[]},
+  {"chapter":6,"title":"c6","word_count":3000,"end_hook":{"strength":3,"type":"反转预告","quote":"q"},"shuang_points":[{"type":"逆袭","intensity":3,"quote":"q"}],"emotion_tone":"爽","conflict_closed":true,"info_gain":true,"is_filler":false,"commercial_flags":[]}
+]
