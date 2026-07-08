@@ -45,11 +45,21 @@ def _prompt(name):
 
 
 def _parse_json(raw):
-    """容忍模型偶尔加的 ```json 围栏。"""
-    s = raw.strip()
-    s = re.sub(r"^```(?:json)?\s*", "", s)
-    s = re.sub(r"\s*```$", "", s)
-    return json.loads(s)
+    """从模型输出抽出 JSON——容忍前置散文分析 + ```json 代码块 + 裸 JSON。"""
+    candidates = []
+    blocks = re.findall(r"```(?:json)?\s*(.+?)\s*```", raw, re.S)
+    candidates.extend(reversed(blocks))       # 代码块，取最后一个（通常是最终结果）
+    i, j = raw.find("{"), raw.rfind("}")
+    if i != -1 and j > i:
+        candidates.append(raw[i:j + 1])       # 首 { 到末 } 的整体（无围栏时）
+    candidates.append(raw.strip())            # 整段兜底
+    last = None
+    for c in candidates:
+        try:
+            return json.loads(c)
+        except Exception as e:
+            last = e
+    raise ValueError(f"无法从输出中解析 JSON：{last}")
 
 
 def _ask_json(llm_call, prompt, payload, validate=None, retries=2):
