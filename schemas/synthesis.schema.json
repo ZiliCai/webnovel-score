@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["dimensions","weighted_total","grade","signing_verdict",
+               "hard_issues","dropout_risk_chapters"],
+  "properties": {
+    "dimensions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key","score","anchor_band","evidence","rationale"],
+        "properties": {
+          "key": {"enum": ["开局抓力","爽点系统","追读钩子","节奏与留存","题材卖点","长线承载"]},
+          "score": {"type": "integer", "minimum": 0, "maximum": 100},
+          "anchor_band": {"type": "string"},
+          "evidence": {"type": "array", "items": {"type": "string"}},
+          "rationale": {"type": "string"}
+        }
+      }
+    },
+    "weighted_total": {"type": "integer", "minimum": 0, "maximum": 100},
+    "grade": {"enum": ["S","A","B","C"]},
+    "signing_verdict": {"type": "string"},
+    "hard_issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["issue","chapter","quote","commercial_mechanism","fix"],
+        "properties": {
+          "issue": {"type": "string"},
+          "chapter": {"type": "integer"},
+          "quote": {"type": "string"},
+          "commercial_mechanism": {"type": "string"},
+          "fix": {"type": "string"}
+        }
+      }
+    },
+    "dropout_risk_chapters": {"type": "array", "items": {"type": "integer"}}
+  }
+}

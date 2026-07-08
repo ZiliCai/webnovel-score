@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["chapter","title","word_count","end_hook","shuang_points",
+               "emotion_tone","conflict_closed","info_gain","is_filler","commercial_flags"],
+  "properties": {
+    "chapter": {"type": "integer"},
+    "title": {"type": "string"},
+    "word_count": {"type": "integer"},
+    "end_hook": {
+      "type": "object",
+      "required": ["strength","type","quote"],
+      "properties": {
+        "strength": {"type": "integer", "minimum": 0, "maximum": 3},
+        "type": {"enum": ["悬念未解","反转预告","危机降临","新信息抛出","无"]},
+        "quote": {"type": "string", "maxLength": 80}
+      }
+    },
+    "shuang_points": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type","intensity","quote"],
+        "properties": {
+          "type": {"enum": ["打脸","逆袭","扮猪吃虎","获得","复仇","升级","情感兑现","其他"]},
+          "intensity": {"type": "integer", "minimum": 1, "maximum": 3},
+          "quote": {"type": "string", "maxLength": 80}
+        }
+      }
+    },
+    "emotion_tone": {"enum": ["紧张","爽","热血","甜","压抑","悬疑","平淡","其他"]},
+    "conflict_closed": {"type": "boolean"},
+    "info_gain": {"type": "boolean"},
+    "is_filler": {"type": "boolean"},
+    "commercial_flags": {"type": "array", "items": {"type": "string"}}
+  }
+}
