@@ -19,3 +19,8 @@ def test_stance_dirty_findings_flagged():
 def test_stance_clean_when_only_commercial():
     clean = {"hard_issues": [{"issue":"掉读","commercial_mechanism":"中段掉读"}]}
     assert stance_clean(clean) is True
+
+def test_stance_dirty_dimension_rationale_flagged():
+    synth = {"hard_issues": [], "dimensions": [
+        {"key": "爽点系统", "score": 55, "rationale": "扣分因为男凝、物化女性"}]}
+    assert stance_clean(synth) is False

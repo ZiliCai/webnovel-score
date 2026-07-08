@@ -40,6 +40,7 @@
 
 ## 平台调权
 权重表在 `weights.json`；起点向抬「长线承载」、降「开局抓力」，番茄向反之。未识别平台用 `generic`。
+知乎盐言（zhihu）向：短钩密集，抬「开局抓力/追读钩子」、压「长线承载」。
 
 ## 内置 fallback
 若本文件不可读，评分仍用上述四档语义 + `weights.json`；报告标 `Rubric Source: embedded fallback`。

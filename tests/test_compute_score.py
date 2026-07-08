@@ -1,3 +1,4 @@
+import pytest
 from scripts.compute_score import compute_overall
 from scripts.load_rubric import load_weights, DIMENSIONS
 
@@ -29,3 +30,18 @@ def test_grade_boundaries():
     assert grade_of(74) == "B"
     assert grade_of(60) == "B"
     assert grade_of(59) == "C"
+
+
+def test_round_half_up_at_boundary():
+    # fanqie: 95*30 + 80*(20+15+15+12+8) = 2850 + 5600 = 8450 -> 84.5 -> half-up 85 -> S
+    scores = {"开局抓力":95,"爽点系统":80,"追读钩子":80,
+              "节奏与留存":80,"题材卖点":80,"长线承载":80}
+    out = compute_overall(scores, load_weights("fanqie"))
+    assert out["weighted_total"] == 85
+    assert out["grade"] == "S"
+
+
+def test_missing_dimension_raises():
+    scores = {"开局抓力":80}  # missing 5
+    with pytest.raises(ValueError):
+        compute_overall(scores, load_weights("fanqie"))

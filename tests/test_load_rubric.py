@@ -6,7 +6,7 @@ def test_six_dimensions():
 
 
 def test_each_platform_sums_to_100():
-    for p in ("fanqie", "qidian", "generic"):
+    for p in ("fanqie", "qidian", "zhihu", "generic"):
         w = load_weights(p)
         assert set(w) == set(DIMENSIONS)
         assert sum(w.values()) == 100, f"{p} 权重和≠100"

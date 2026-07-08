@@ -10,6 +10,14 @@ ALLOWED_MECHANISMS = {
 }
 
 
+# 自由文本层的商业归因关键词（维度 rationale 没有 commercial_mechanism 字段，只能从文本判断）
+_GROUNDING_KEYWORDS = ("审核", "封禁", "下架", "劝退", "掉读", "钩子", "节奏")
+
+
+def _has_moral(text):
+    return any(tok in text for tok in MORAL_TOKENS)
+
+
 def _finding_text(f):
     return " ".join(str(f.get(k, "")) for k in ("issue", "rationale", "fix"))
 
@@ -17,8 +25,18 @@ def _finding_text(f):
 def scan_moral_findings(findings):
     flagged = []
     for f in findings:
-        has_moral = any(tok in _finding_text(f) for tok in MORAL_TOKENS)
+        has_moral = _has_moral(_finding_text(f))
         grounded = f.get("commercial_mechanism", "") in ALLOWED_MECHANISMS
         if has_moral and not grounded:
             flagged.append(f)
+    return flagged
+
+
+def scan_dimension_rationales(dimensions):
+    """维度 rationale 里出现道德评判词、又没有任何商业归因关键词的，判为道德漂移。"""
+    flagged = []
+    for d in dimensions:
+        rationale = str(d.get("rationale", ""))
+        if _has_moral(rationale) and not any(k in rationale for k in _GROUNDING_KEYWORDS):
+            flagged.append(d)
     return flagged

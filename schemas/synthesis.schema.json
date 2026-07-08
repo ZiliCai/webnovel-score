@@ -6,6 +6,7 @@
   "properties": {
     "dimensions": {
       "type": "array",
+      "minItems": 6,
       "items": {
         "type": "object",
         "required": ["key","score","anchor_band","evidence","rationale"],
