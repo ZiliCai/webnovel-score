@@ -29,7 +29,8 @@ from scripts.validate_output import validate_signal_card, validate_synthesis
 from scripts.scan_moral_drift import scan_moral_findings, scan_dimension_rationales
 
 REF = ROOT / "references"
-OPENING_CHAPTERS = 6  # 开局深读章数（设计为 6，必要时 harness 可加大到 10）
+OPENING_CHAPTERS = 6    # 开局深读章数（设计为 6，必要时 harness 可加大到 10）
+BATCH_CHARS = 50000     # Stage 2 每批字数预算（约 25-30k tokens，装得下、留余量）
 
 
 def _stance():
@@ -49,9 +50,12 @@ def _parse_json(raw):
     candidates = []
     blocks = re.findall(r"```(?:json)?\s*(.+?)\s*```", raw, re.S)
     candidates.extend(reversed(blocks))       # 代码块，取最后一个（通常是最终结果）
-    i, j = raw.find("{"), raw.rfind("}")
-    if i != -1 and j > i:
-        candidates.append(raw[i:j + 1])       # 首 { 到末 } 的整体（无围栏时）
+    # 无围栏时：谁的开括号更靠前谁是外层（对象 { 或 数组 [）
+    fo, fa = raw.find("{"), raw.find("[")
+    if fa != -1 and (fo == -1 or fa < fo):
+        candidates.append(raw[fa:raw.rfind("]") + 1])   # 外层是数组
+    elif fo != -1:
+        candidates.append(raw[fo:raw.rfind("}") + 1])   # 外层是对象
     candidates.append(raw.strip())            # 整段兜底
     last = None
     for c in candidates:
@@ -84,10 +88,55 @@ def _ask_json(llm_call, prompt, payload, validate=None, retries=2):
     raise RuntimeError(f"LLM 未能产出合规 JSON：{last}")
 
 
+def _ask_json_array(llm_call, prompt, payload, expect_len, validate=None, retries=2):
+    """发一批章节，要一个 JSON 数组（每章一张卡），校验数量与每张卡。"""
+    msg = f"{prompt}\n\n{payload}"
+    last = None
+    for _ in range(retries + 1):
+        raw = llm_call(msg)
+        try:
+            arr = _parse_json(raw)
+        except Exception as e:
+            last = f"输出不是合法 JSON（{e}），只返回一个 JSON 数组。"
+            msg = f"{prompt}\n\n{payload}\n\n{last}"
+            continue
+        if not isinstance(arr, list):
+            last = "必须返回 JSON 数组，每章一个对象。"
+            msg = f"{prompt}\n\n{payload}\n\n{last}"
+            continue
+        if len(arr) != expect_len:
+            last = f"返回 {len(arr)} 张卡，应为 {expect_len} 张（每章一张、按章序）。"
+            msg = f"{prompt}\n\n{payload}\n\n{last}"
+            continue
+        if validate:
+            bad = [(k, validate(o)[:2]) for k, o in enumerate(arr) if validate(o)]
+            if bad:
+                last = f"部分卡不合 schema：{bad[:3]}，修正后重出完整数组。"
+                msg = f"{prompt}\n\n{payload}\n\n{last}"
+                continue
+        return arr
+    raise RuntimeError(f"逐章信号批次未能产出合规数组：{last}")
+
+
 def _chapter_text(lines, chapters, i):
     start = chapters[i]["start_line"] - 1
     end = chapters[i + 1]["start_line"] - 1 if i + 1 < len(chapters) else len(lines)
     return "\n".join(lines[start:end])
+
+
+def _batches(chapters, budget):
+    """把章节下标按字数预算分批：单章超预算则自成一批。返回 [[idx,...], ...]。"""
+    out, cur, cur_len = [], [], 0
+    for i, c in enumerate(chapters):
+        wc = c.get("word_count") or 0
+        if cur and cur_len + wc > budget:
+            out.append(cur)
+            cur, cur_len = [], 0
+        cur.append(i)
+        cur_len += wc
+    if cur:
+        out.append(cur)
+    return out
 
 
 def score_book(text, llm_call, platform="fanqie", book_name="未命名",
@@ -109,17 +158,21 @@ def score_book(text, llm_call, platform="fanqie", book_name="未命名",
         llm_call, _prompt("prompt-开局深读.md"),
         f"前 {n_open} 章全文：\n{opening}")
 
-    # Stage 2：逐章信号 map（每章一张信号卡；harness 可并行）
+    # Stage 2：逐章信号 map — 按字数预算分批，每批一个子 agent 出一组信号卡
+    # （90 章 ≈ 几批，不是 90 次调用；同批多章由同一调用判、同一把尺子）
     cards = []
-    for i in range(len(chapters)):
-        c = chapters[i]
-        card = _ask_json(
-            llm_call, _prompt("prompt-逐章信号.md"),
-            f"章节编号：第{c['number']}章\n标题：{c['title']}\n字数约：{c['word_count']}\n\n"
-            f"章节原文：\n{_chapter_text(lines, chapters, i)}",
-            validate=validate_signal_card)
-        card.setdefault("chapter", c["number"])
-        cards.append(card)
+    for batch in _batches(chapters, BATCH_CHARS):
+        parts = []
+        for i in batch:
+            c = chapters[i]
+            parts.append(f"=== 第{c['number']}章 {c['title']}（约{c['word_count']}字）===\n"
+                         f"{_chapter_text(lines, chapters, i)}")
+        payload = "以下是连续若干章，对每一章各产一张信号卡：\n\n" + "\n\n".join(parts)
+        arr = _ask_json_array(llm_call, _prompt("prompt-逐章信号.md"), payload,
+                              expect_len=len(batch), validate=validate_signal_card)
+        for idx, card in zip(batch, arr):
+            card.setdefault("chapter", chapters[idx]["number"])
+            cards.append(card)
 
     # Stage 3：曲线聚合（纯脚本）
     curves = aggregate(cards)
