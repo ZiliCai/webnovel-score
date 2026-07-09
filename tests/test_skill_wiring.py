@@ -5,6 +5,7 @@ SKILL = (ROOT / "SKILL.md").read_text(encoding="utf-8")
 REFERENCED = [
     "references/立场声明.md","references/rubric.md","references/weights.json",
     "references/prompt-开局深读.md","references/prompt-逐章信号.md",
+    "references/prompt-抽查深读.md",
     "references/prompt-维度评分.md","references/prompt-反调.md","references/报告模板.md",
     "schemas/signal_card.schema.json","schemas/synthesis.schema.json",
     "scripts/detect_chapters.py","scripts/aggregate_curves.py",

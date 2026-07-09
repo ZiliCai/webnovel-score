@@ -9,19 +9,22 @@
 - `is_filler`：本章 无爽点 且 无章末钩子 且 无信息增量 且 冲突没推进 → true。
 - `emotion_tone` / `conflict_closed` / `info_gain` 照字面客观填。
 
-**输出一个 JSON 数组**（每章一个对象、按章序、数量＝这批章数；不带其它文字）：
+**输出单个 JSON 对象**（不带其它文字）。`batch_summary`＝这一批的剧情摘要（2-4 句，客观陈述：主线推进 / 新设定或世界观展开 / 关键新角色 / 卖点变化——它是后续「题材卖点 / 长线承载」评分能看到的唯一中后段依据，写实、不评价）；`cards`＝每章一个对象、按章序、数量＝这批章数：
 
 ```json
-[
-  {
-    "chapter": 整数, "title": "标题", "word_count": 整数,
-    "end_hook": {"strength": 0-3, "type": "悬念未解|反转预告|危机降临|新信息抛出|无", "quote": "章末原句≤80字"},
-    "shuang_points": [{"type": "打脸|逆袭|扮猪吃虎|获得|复仇|升级|情感兑现|其他", "intensity": 1-3, "quote": "≤80字"}],
-    "emotion_tone": "紧张|爽|热血|甜|压抑|悬疑|平淡|其他",
-    "conflict_closed": 布尔,
-    "info_gain": 布尔,
-    "is_filler": 布尔,
-    "commercial_flags": ["仅当触发①平台审核风险 或 ②劝退目标读者盘时填，否则空数组"]
-  }
-]
+{
+  "batch_summary": "2-4句客观剧情摘要",
+  "cards": [
+    {
+      "chapter": 整数, "title": "标题", "word_count": 整数,
+      "end_hook": {"strength": 0-3, "type": "悬念未解|反转预告|危机降临|新信息抛出|无", "quote": "章末原句≤80字"},
+      "shuang_points": [{"type": "打脸|逆袭|扮猪吃虎|获得|复仇|升级|情感兑现|其他", "intensity": 1-3, "quote": "≤80字"}],
+      "emotion_tone": "紧张|爽|热血|甜|压抑|悬疑|平淡|其他",
+      "conflict_closed": 布尔,
+      "info_gain": 布尔,
+      "is_filler": 布尔,
+      "commercial_flags": ["仅当触发①平台审核风险 或 ②劝退目标读者盘时填，否则空数组"]
+    }
+  ]
+}
 ```

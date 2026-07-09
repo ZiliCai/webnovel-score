@@ -88,34 +88,34 @@ def _ask_json(llm_call, prompt, payload, validate=None, retries=2):
     raise RuntimeError(f"LLM 未能产出合规 JSON：{last}")
 
 
-def _ask_json_array(llm_call, prompt, payload, expect_len, validate=None, retries=2):
-    """发一批章节，要一个 JSON 数组（每章一张卡），校验数量与每张卡。"""
+def _ask_batch(llm_call, prompt, payload, expect_len, validate_card=None, retries=2):
+    """发一批章节，要 {"batch_summary": str, "cards": [...]}，校验卡数与每张卡。"""
     msg = f"{prompt}\n\n{payload}"
     last = None
     for _ in range(retries + 1):
         raw = llm_call(msg)
         try:
-            arr = _parse_json(raw)
+            obj = _parse_json(raw)
         except Exception as e:
-            last = f"输出不是合法 JSON（{e}），只返回一个 JSON 数组。"
+            last = f"输出不是合法 JSON（{e}），只返回含 batch_summary 与 cards 的 JSON 对象。"
             msg = f"{prompt}\n\n{payload}\n\n{last}"
             continue
-        if not isinstance(arr, list):
-            last = "必须返回 JSON 数组，每章一个对象。"
+        if isinstance(obj, list):                     # 模型偷懒只回数组 → 容错包一层
+            obj = {"batch_summary": "", "cards": obj}
+        cards = obj.get("cards")
+        if not isinstance(cards, list) or len(cards) != expect_len:
+            got = len(cards) if isinstance(cards, list) else type(cards).__name__
+            last = f"cards 应为 {expect_len} 张（每章一张、按章序），拿到 {got}。"
             msg = f"{prompt}\n\n{payload}\n\n{last}"
             continue
-        if len(arr) != expect_len:
-            last = f"返回 {len(arr)} 张卡，应为 {expect_len} 张（每章一张、按章序）。"
-            msg = f"{prompt}\n\n{payload}\n\n{last}"
-            continue
-        if validate:
-            bad = [(k, validate(o)[:2]) for k, o in enumerate(arr) if validate(o)]
+        if validate_card:
+            bad = [(k, validate_card(o)[:2]) for k, o in enumerate(cards) if validate_card(o)]
             if bad:
-                last = f"部分卡不合 schema：{bad[:3]}，修正后重出完整数组。"
+                last = f"部分卡不合 schema：{bad[:3]}，修正后重出完整对象。"
                 msg = f"{prompt}\n\n{payload}\n\n{last}"
                 continue
-        return arr
-    raise RuntimeError(f"逐章信号批次未能产出合规数组：{last}")
+        return obj
+    raise RuntimeError(f"逐章信号批次未能产出合规输出：{last}")
 
 
 def _chapter_text(lines, chapters, i):
@@ -140,9 +140,11 @@ def _batches(chapters, budget):
 
 
 def score_book(text, llm_call, platform="fanqie", book_name="未命名",
-               opening_chapters=OPENING_CHAPTERS):
+               opening_chapters=OPENING_CHAPTERS, spot_check=True, counter_check=True):
     """跑完整 Stage 0-4.5，返回带 weighted_total/grade 的 synthesis dict。
 
+    spot_check=True：Stage 3.5 抽 2-3 个中后段章节全文核验（优先掉读风险章）。
+    counter_check=True：Stage 4.5 反调 agent 有据下调 + 道德 scrub（失败不阻断）。
     额外键 `_moral_drift_flagged`：机械兜底扫出的道德漂移条目（hard_issues +
     dimensions[].rationale）。应为 []；非空说明模型没守住商业中立，需处理。
     """
@@ -158,9 +160,9 @@ def score_book(text, llm_call, platform="fanqie", book_name="未命名",
         llm_call, _prompt("prompt-开局深读.md"),
         f"前 {n_open} 章全文：\n{opening}")
 
-    # Stage 2：逐章信号 map — 按字数预算分批，每批一个子 agent 出一组信号卡
+    # Stage 2：逐章信号 map — 按字数预算分批，每批一个子 agent 出一组信号卡 + 批次剧情摘要
     # （90 章 ≈ 几批，不是 90 次调用；同批多章由同一调用判、同一把尺子）
-    cards = []
+    cards, batch_summaries = [], []
     for batch in _batches(chapters, BATCH_CHARS):
         parts = []
         for i in batch:
@@ -168,17 +170,44 @@ def score_book(text, llm_call, platform="fanqie", book_name="未命名",
             parts.append(f"=== 第{c['number']}章 {c['title']}（约{c['word_count']}字）===\n"
                          f"{_chapter_text(lines, chapters, i)}")
         payload = "以下是连续若干章，对每一章各产一张信号卡：\n\n" + "\n\n".join(parts)
-        arr = _ask_json_array(llm_call, _prompt("prompt-逐章信号.md"), payload,
-                              expect_len=len(batch), validate=validate_signal_card)
-        for idx, card in zip(batch, arr):
+        env = _ask_batch(llm_call, _prompt("prompt-逐章信号.md"), payload,
+                         expect_len=len(batch), validate_card=validate_signal_card)
+        for idx, card in zip(batch, env["cards"]):
             card.setdefault("chapter", chapters[idx]["number"])
             cards.append(card)
+        if env.get("batch_summary"):
+            batch_summaries.append({
+                "chapters": f"{chapters[batch[0]]['number']}-{chapters[batch[-1]]['number']}",
+                "summary": env["batch_summary"]})
 
     # Stage 3：曲线聚合（纯脚本）
     curves = aggregate(cards)
 
+    # Stage 3.5：中后段抽查深读（核验信号卡 + 爽点执行质量；优先掉读风险章）
+    spot = None
+    if spot_check:
+        pool = list(range(n_open, len(chapters)))
+        if len(pool) > 2:
+            risky_set = set(curves["dropout_risk_chapters"])
+            picks = [i for i in pool if chapters[i]["number"] in risky_set][:2]
+            for pos in (0.5, 0.85):
+                cand = pool[min(int(len(pool) * pos), len(pool) - 1)]
+                if cand not in picks:
+                    picks.append(cand)
+            by_ch = {c["chapter"]: c for c in cards}
+            parts = []
+            for i in sorted(picks[:3]):
+                ch = chapters[i]
+                parts.append(
+                    f"=== 第{ch['number']}章 {ch['title']} ===\n"
+                    f"[先前信号卡] {json.dumps(by_ch.get(ch['number'], {}), ensure_ascii=False)}\n"
+                    f"[原文]\n{_chapter_text(lines, chapters, i)}")
+            spot = _ask_json(llm_call, _prompt("prompt-抽查深读.md"),
+                             "抽查章节（含各章先前的信号卡）：\n\n" + "\n\n".join(parts))
+
     # Stage 4：维度评分（LLM 判 6 维）+ 脚本算总分
-    compressed = json.dumps({"opening_card": opening_card, "curves": curves},
+    compressed = json.dumps({"opening_card": opening_card, "curves": curves,
+                             "batch_summaries": batch_summaries, "spot_check": spot},
                             ensure_ascii=False)
     synth = _ask_json(
         llm_call, _prompt("prompt-维度评分.md"),
@@ -189,7 +218,37 @@ def score_book(text, llm_call, platform="fanqie", book_name="未命名",
     synth["weighted_total"] = overall["weighted_total"]
     synth["grade"] = overall["grade"]
 
-    # Stage 4.5：机械道德兜底（脚本层，跨模型必跑）
+    # Stage 4.5a：反调 cross-check（LLM，对照曲线/抽查证据下调 + 道德 scrub；失败不阻断）
+    if counter_check:
+        try:
+            counter = _ask_json(
+                llm_call, _prompt("prompt-反调.md"),
+                "待反调的评分 + 证据：\n" + json.dumps(
+                    {"scoring": {k: v for k, v in synth.items() if not k.startswith("_")},
+                     "curves": curves, "spot_check": spot,
+                     "batch_summaries": batch_summaries}, ensure_ascii=False))
+            for a in counter.get("score_adjustments") or []:
+                k, to = a.get("key"), a.get("to")
+                if k in dim_scores and isinstance(to, int) and 0 <= to <= 100:
+                    dim_scores[k] = to
+                    for d in synth["dimensions"]:
+                        if d["key"] == k:
+                            d["score"] = to
+                            d["rationale"] += f"（反调调整：{a.get('reason', '')}）"
+            removed = counter.get("removed_moral_findings") or []
+            if removed:
+                synth["hard_issues"] = [
+                    h for h in synth["hard_issues"]
+                    if not any(r and (r in h.get("issue", "") or h.get("issue", "") in r)
+                               for r in removed)]
+            overall = compute_overall(dim_scores, load_weights(platform))
+            synth["weighted_total"] = overall["weighted_total"]
+            synth["grade"] = overall["grade"]
+            synth["_counter_check"] = counter
+        except Exception as e:
+            synth["_counter_check_error"] = str(e)   # 反调挂了保留原分，不阻断
+
+    # Stage 4.5b：机械道德兜底（脚本层，跨模型必跑）
     synth["_moral_drift_flagged"] = (
         scan_moral_findings(synth.get("hard_issues", []))
         + scan_dimension_rationales(synth.get("dimensions", [])))

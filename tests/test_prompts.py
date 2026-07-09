@@ -1,7 +1,7 @@
 import pathlib
 REF = pathlib.Path(__file__).resolve().parents[1] / "references"
 
-PROMPTS = ["prompt-开局深读.md","prompt-逐章信号.md","prompt-维度评分.md","prompt-反调.md"]
+PROMPTS = ["prompt-开局深读.md","prompt-逐章信号.md","prompt-抽查深读.md","prompt-维度评分.md","prompt-反调.md"]
 
 def test_every_prompt_injects_stance():
     for p in PROMPTS:
@@ -10,7 +10,7 @@ def test_every_prompt_injects_stance():
 
 def test_signal_prompt_declares_schema_fields():
     t = (REF / "prompt-逐章信号.md").read_text(encoding="utf-8")
-    for f in ["end_hook","shuang_points","emotion_tone","is_filler","commercial_flags"]:
+    for f in ["end_hook","shuang_points","emotion_tone","is_filler","commercial_flags","batch_summary"]:
         assert f in t
 
 def test_synthesis_prompt_declares_fields():
